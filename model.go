@@ -59,6 +59,22 @@ type CDResult struct {
 	ContentLength int
 }
 
+func (result CDResult) IsRedirect() bool {
+	return result.Redirect != "" || (result.Status >= 300 && result.Status < 400)
+}
+func (result CDResult) IsSuccess() bool {
+	return result.Status >= 200 && result.Status < 300
+}
+func (result CDResult) IsError() bool {
+	return result.Status >= 400
+}
+func (result CDResult) IsAuthError() bool {
+	return result.Status == 401 || result.Status == 403
+}
+func (result CDResult) IsRateLimit() bool {
+	return result.Status == 429
+}
+
 type FfufConfig struct {
 }
 
