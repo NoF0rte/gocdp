@@ -20,7 +20,8 @@ type CdOutput struct {
 
 type CDResults []CDResult
 
-func (results CDResults) GroupByStatus() map[int][]CDResult {
+// GroupByStatusRange groups the results by status ranges e.g. all results with the status code in the range of 200 - 299 are grouped
+func (results CDResults) GroupByStatusRange() map[int][]CDResult {
 	grouped := make(map[int][]CDResult)
 	for _, result := range results {
 		var status int
@@ -36,6 +37,26 @@ func (results CDResults) GroupByStatus() map[int][]CDResult {
 			}
 		}
 		grouped[status] = append(grouped[status], result)
+	}
+
+	for _, group := range grouped {
+		sort.Slice(group, func(i, j int) bool {
+			first := group[i]
+			second := group[j]
+			if first.Status == second.Status {
+				return strings.Compare(first.Url, second.Url) > 1
+			}
+			return first.Status < second.Status
+		})
+	}
+	return grouped
+}
+
+// GroupByStatus groups the results by the status code e.g. all results with the status code of 302 are grouped
+func (results CDResults) GroupByStatus() map[int][]CDResult {
+	grouped := make(map[int][]CDResult)
+	for _, result := range results {
+		grouped[result.Status] = append(grouped[result.Status], result)
 	}
 
 	for _, group := range grouped {
@@ -73,6 +94,15 @@ func (result CDResult) IsAuthError() bool {
 }
 func (result CDResult) IsRateLimit() bool {
 	return result.Status == 429
+}
+
+func (result CDResult) IsStatus(statusCodes ...int) bool {
+	for _, status := range statusCodes {
+		if result.Status == status {
+			return true
+		}
+	}
+	return false
 }
 
 type FfufConfig struct {
