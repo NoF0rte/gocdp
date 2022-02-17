@@ -1,10 +1,12 @@
 package cmd
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"os"
 
 	"github.com/NoF0rte/gocdp"
 	"github.com/spf13/cobra"
@@ -23,7 +25,19 @@ var rootCmd = &cobra.Command{
 	Short: "Content discovery parser",
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		results, err := gocdp.SmartParseFiles(args)
+		var files []string
+		for _, arg := range args {
+			if arg == "-" {
+				scanner := bufio.NewScanner(os.Stdin)
+				for scanner.Scan() {
+					files = append(files, scanner.Text())
+				}
+			} else {
+				files = append(files, arg)
+			}
+		}
+
+		results, err := gocdp.SmartParseFiles(files)
 		if err != nil {
 			return err
 		}
