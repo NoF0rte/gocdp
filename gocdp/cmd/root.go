@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"html/template"
 	"os"
+	"strings"
 
 	"github.com/NoF0rte/gocdp"
 	"github.com/spf13/cobra"
@@ -19,6 +20,16 @@ func (w noopWriter) Write(bytes []byte) (int, error) {
 	return 0, nil
 }
 
+const (
+	groupByStatus = "status"
+	groupByRange  = "range"
+)
+
+var validGroupByOptions = []string{
+	groupByStatus,
+	groupByRange,
+}
+
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:   "gocdp files...",
@@ -27,6 +38,7 @@ var rootCmd = &cobra.Command{
 
 Available query functions:
 
+  .IsStatus
   .IsRedirect
   .IsSuccess
   .IsError
@@ -55,14 +67,33 @@ gocdp ffuf* -q '.IsRedirect' -f '{{.Redirect}}'
 Show the redirect URLs from the results which were redirected
 
 
+gocdp ffuf* -q '.IsRedirect' -f '{{.Url}} -> {{.Redirect}}'
+
+Show the urls and where they redirect from the results which were redirected
+
+
 gocdp ffuf* -q 'not (or .IsRateLimit .IsError)'
 
 Show the JSON output of all results which weren't rate limited or errors
 
 
-gocdp ffuf* -g
+gocdp ffuf* -q 'not (.IsStatus "400,429,401")'
+
+Show the JSON output of all results except the ones with status codes 400, 429, or 401
+
+
+gocdp ffuf* -q '.IsStatus "409"'
+
+Show the JSON output of only the results with the status code of 409
+
+
+gocdp ffuf* -g range
 
 Show the JSON output of all results, grouped by the status code ranges i.e. 200-299, 300-399, etc.
+
+gocdp ffuf* -g status
+
+Show the JSON output of all results, grouped by the status code
 `,
 	Args: cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -106,7 +137,7 @@ Show the JSON output of all results, grouped by the status code ranges i.e. 200-
 			results = filteredResults
 		}
 
-		group, _ := cmd.Flags().GetBool("group")
+		group, _ := cmd.Flags().GetString("group")
 		format, _ := cmd.Flags().GetString("format")
 		if format != "" {
 			formatTemplate, err := template.New("format").Parse(format)
@@ -122,8 +153,14 @@ Show the JSON output of all results, grouped by the status code ranges i.e. 200-
 				}
 				fmt.Println(buf.String())
 			}
-		} else if group {
-			grouped := results.GroupByStatus()
+		} else if group != "" {
+			var grouped map[int][]gocdp.CDResult
+			switch group {
+			case groupByStatus:
+				grouped = results.GroupByStatus()
+			case groupByRange:
+				grouped = results.GroupByStatusRange()
+			}
 
 			data, err := json.MarshalIndent(grouped, "", "  ")
 			if err != nil {
@@ -151,5 +188,8 @@ func Execute() {
 func init() {
 	rootCmd.Flags().StringP("format", "f", "", "golang text/template format to be applied on each result")
 	rootCmd.Flags().StringP("query", "q", "", "golang text/template used to filter the results")
-	rootCmd.Flags().BoolP("group", "g", false, "group the results by status code")
+	rootCmd.Flags().StringP("group", "g", "", fmt.Sprintf("group the results by (%s)", strings.Join(validGroupByOptions, "|")))
+	rootCmd.RegisterFlagCompletionFunc("group", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return validGroupByOptions, cobra.ShellCompDirectiveDefault
+	})
 }
