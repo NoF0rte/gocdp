@@ -23,7 +23,48 @@ func (w noopWriter) Write(bytes []byte) (int, error) {
 var rootCmd = &cobra.Command{
 	Use:   "gocdp files...",
 	Short: "Content discovery parser",
-	Args:  cobra.MinimumNArgs(1),
+	Long: `Content discovery parser
+
+Available query functions:
+
+  .IsRedirect
+  .IsSuccess
+  .IsError
+  .IsAuthError
+  .IsRateLimit
+
+Available format fields:
+
+  .Url
+  .Status
+  .Redirect
+  .ContentType
+  .ContentLength
+`,
+	Example: `
+
+gocdp ffuf* -q '.IsSuccess' -f '{{.Url}}'
+	OR
+find ./ -name '*ffuf*' | gocdp - -q '.IsSuccess' -f '{{.Url}}'
+
+Show only the URLs from the results with success status codes
+
+
+gocdp ffuf* -q '.IsRedirect' -f '{{.Redirect}}'
+
+Show the redirect URLs from the results which were redirected
+
+
+gocdp ffuf* -q 'not (or .IsRateLimit .IsError)'
+
+Show the JSON output of all results which weren't rate limited or errors
+
+
+gocdp ffuf* -g
+
+Show the JSON output of all results, grouped by the status code ranges i.e. 200-299, 300-399, etc.
+`,
+	Args: cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var files []string
 		for _, arg := range args {
