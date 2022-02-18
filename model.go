@@ -13,11 +13,6 @@ var statusCodeGroups = []int{
 	500,
 }
 
-type CdOutput struct {
-	Results []CDResult
-	Config  interface{}
-}
-
 type CDResults []CDResult
 
 // GroupByStatusRange groups the results by status ranges e.g. all results with the status code in the range of 200 - 299 are grouped
@@ -103,10 +98,4 @@ func (result CDResult) IsStatus(statusCodes ...int) bool {
 		}
 	}
 	return false
-}
-
-type FfufConfig struct {
-}
-
-type GobusterConfig struct {
 }
