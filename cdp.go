@@ -13,6 +13,7 @@ var errNoParser = errors.New("no parser found")
 var defaultParsers = []Parser{
 	FfufParser{},
 	GobusterParser{},
+	DirbParser{},
 }
 
 type Option func(*CDP)
