@@ -55,7 +55,7 @@ func (parser FfufParser) CanParse(input string) bool {
 		return false
 	}
 
-	return strings.HasPrefix(output.CommandLine, "ffuf")
+	return output.CommandLine != ""
 }
 
 type GobusterParser struct {
