@@ -137,6 +137,11 @@ Show the JSON output of all results, grouped by the status code
 			results = filteredResults
 		}
 
+		unique, _ := cmd.Flags().GetBool("unique")
+		if unique {
+			results = results.UniqueByURL()
+		}
+
 		group, _ := cmd.Flags().GetString("group")
 		format, _ := cmd.Flags().GetString("format")
 		if format != "" {
@@ -186,6 +191,7 @@ func Execute() {
 }
 
 func init() {
+	rootCmd.Flags().Bool("unique", false, "De-duplicate the results by URL")
 	rootCmd.Flags().StringP("format", "f", "", "golang text/template format to be applied on each result")
 	rootCmd.Flags().StringP("query", "q", "", "golang text/template used to filter the results")
 	rootCmd.Flags().StringP("group", "g", "", fmt.Sprintf("group the results by (%s)", strings.Join(validGroupByOptions, "|")))

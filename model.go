@@ -67,6 +67,23 @@ func (results CDResults) GroupByStatus() map[int][]CDResult {
 	return grouped
 }
 
+// UniqueByURL returns CDResults with no duplicate URLs
+func (results CDResults) UniqueByURL() CDResults {
+	var unique CDResults
+
+	set := make(map[string]bool)
+	for _, result := range results {
+		_, found := set[result.Url]
+		set[result.Url] = true
+
+		if !found {
+			unique = append(unique, result)
+		}
+	}
+
+	return unique
+}
+
 type CDResult struct {
 	Url           string
 	Status        int
