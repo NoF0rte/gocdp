@@ -3,7 +3,7 @@ Golang Content Discovery Parser. Parses and normalizes content discovery output
  # CLI
  To install the CLI run the following
  ```
- go install github.com/NoF0rte/gocdp/gocdp@latest
+ go install github.com/NoF0rte/gocdp/cmd/gocdp@latest
  ```
 
  ## Examples
