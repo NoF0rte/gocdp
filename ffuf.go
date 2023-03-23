@@ -1,6 +1,10 @@
 package gocdp
 
-import "encoding/json"
+import (
+	"encoding/json"
+
+	"github.com/iancoleman/orderedmap"
+)
 
 type ffufOutput struct {
 	CommandLine string       `json:"commandline"`
@@ -14,7 +18,27 @@ type ffufResult struct {
 	Redirect      string `json:"redirectlocation"`
 	ContentType   string `json:"content-type"`
 	ContentLength int    `json:"length"`
+	raw           interface{}
 }
+
+type _ffufResult ffufResult
+
+func (f *ffufResult) UnmarshalJSON(bytes []byte) (err error) {
+	foo := _ffufResult{}
+
+	if err = json.Unmarshal(bytes, &foo); err == nil {
+		*f = ffufResult(foo)
+	}
+
+	m := orderedmap.New()
+
+	if err = json.Unmarshal(bytes, &m); err == nil {
+		f.raw = m
+	}
+
+	return err
+}
+
 type FfufParser struct {
 }
 
@@ -33,6 +57,7 @@ func (parser FfufParser) Parse(input string) (CDResults, error) {
 			Redirect:      result.Redirect,
 			ContentType:   result.ContentType,
 			ContentLength: result.ContentLength,
+			source:        result.raw,
 		})
 	}
 	return results, nil
@@ -52,44 +77,50 @@ func (parser FfufParser) CanTrim(input string) bool {
 	return parser.CanParse(input)
 }
 
-func (parser FfufParser) Trim(input string, max int) (string, error) {
+func (parser FfufParser) Trim(input string, opts ...TrimOption) (string, error) {
 	results, err := parser.Parse(input)
 	if err != nil {
 		return "", err
 	}
 
-	var trimCodes []int
-	grouped := results.GroupByStatus()
-	for code, r := range grouped {
-		if len(r) > max {
-			trimCodes = append(trimCodes, code)
+	options := &TrimOptions{
+		filters: make([]func(CDResult) bool, 0),
+	}
+
+	for _, o := range opts {
+		o(options)
+	}
+
+	statusCounts := make(map[int]int)
+
+	var filtered []interface{}
+	for _, result := range results {
+		isFiltered := false
+		for _, filter := range options.filters {
+			if filter(result) {
+				isFiltered = true
+				break
+			}
+		}
+
+		if !isFiltered && options.maxResults > 0 {
+			isFiltered = statusCounts[result.Status] >= options.maxResults
+		}
+
+		if !isFiltered {
+			statusCounts[result.Status] += 1
+			filtered = append(filtered, result.source)
 		}
 	}
 
-	if len(trimCodes) == 0 {
-		return input, nil
-	}
-
-	var output map[string]interface{}
-	err = json.Unmarshal([]byte(input), &output)
+	output := orderedmap.New()
+	err = json.Unmarshal([]byte(input), output)
 	if err != nil {
 		return "", err
 	}
 
-	var trimmedResults []interface{}
-	allResults := output["results"].([]interface{})
-	for _, c := range trimCodes {
-		for _, result := range allResults {
-			code := (result.(map[string]interface{}))["status"].(float64)
-			if int(code) == c {
-				continue
-			}
+	output.Set("results", filtered)
 
-			trimmedResults = append(trimmedResults, result)
-		}
-	}
-
-	output["results"] = trimmedResults
 	bytes, err := json.MarshalIndent(output, "", "  ")
 	if err != nil {
 		return "", err

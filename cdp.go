@@ -145,9 +145,9 @@ func SmartParse(reader io.Reader, parsers ...Parser) (CDResults, error) {
 	return c.SmartParse(reader, parsers...)
 }
 
-func (cdp *CDP) SmartTrimFiles(files []string, max int, trimmers ...Trimmer) error {
+func (cdp *CDP) SmartTrimFiles(files []string, opts []TrimOption, trimmers ...Trimmer) error {
 	for _, file := range files {
-		err := cdp.SmartTrimFile(file, max, trimmers...)
+		err := cdp.SmartTrimFile(file, opts, trimmers...)
 		if err != nil {
 			if err == errNoTrimmer {
 				if cdp.failNoTrimmerErr {
@@ -161,13 +161,13 @@ func (cdp *CDP) SmartTrimFiles(files []string, max int, trimmers ...Trimmer) err
 	return nil
 }
 
-func (cdp *CDP) SmartTrimFile(file string, max int, trimmers ...Trimmer) error {
+func (cdp *CDP) SmartTrimFile(file string, opts []TrimOption, trimmers ...Trimmer) error {
 	f, err := os.Open(file)
 	if err != nil {
 		return err
 	}
 
-	output, err := cdp.SmartTrim(f, max, trimmers...)
+	output, err := cdp.SmartTrim(f, opts, trimmers...)
 	if err != nil {
 		return err
 	}
@@ -180,7 +180,7 @@ func (cdp *CDP) SmartTrimFile(file string, max int, trimmers ...Trimmer) error {
 	return os.WriteFile(file, []byte(output), 0644)
 }
 
-func (cdp *CDP) SmartTrim(reader io.Reader, max int, trimmers ...Trimmer) (string, error) {
+func (cdp *CDP) SmartTrim(reader io.Reader, opts []TrimOption, trimmers ...Trimmer) (string, error) {
 	bytes, err := io.ReadAll(reader)
 	if err != nil {
 		return "", err
@@ -203,23 +203,23 @@ func (cdp *CDP) SmartTrim(reader io.Reader, max int, trimmers ...Trimmer) (strin
 		return "", errNoTrimmer
 	}
 
-	output, err := trimmer.Trim(input, max)
+	output, err := trimmer.Trim(input, opts...)
 	if err != nil {
 		return "", err
 	}
 	return output, nil
 }
 
-func SmartTrimFiles(files []string, max int, trimmers ...Trimmer) error {
-	return c.SmartTrimFiles(files, max, trimmers...)
+func SmartTrimFiles(files []string, opts []TrimOption, trimmers ...Trimmer) error {
+	return c.SmartTrimFiles(files, opts, trimmers...)
 }
 
-func SmartTrimFile(file string, max int, trimmers ...Trimmer) error {
-	return c.SmartTrimFile(file, max, trimmers...)
+func SmartTrimFile(file string, opts []TrimOption, trimmers ...Trimmer) error {
+	return c.SmartTrimFile(file, opts, trimmers...)
 }
 
-func SmartTrim(reader io.Reader, max int, trimmers ...Trimmer) (string, error) {
-	return c.SmartTrim(reader, max, trimmers...)
+func SmartTrim(reader io.Reader, opts []TrimOption, trimmers ...Trimmer) (string, error) {
+	return c.SmartTrim(reader, opts, trimmers...)
 }
 
 func init() {

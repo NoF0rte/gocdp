@@ -2,7 +2,10 @@ module github.com/NoF0rte/gocdp
 
 go 1.17
 
-require github.com/spf13/cobra v1.2.1
+require (
+	github.com/iancoleman/orderedmap v0.2.0
+	github.com/spf13/cobra v1.2.1
+)
 
 require (
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect

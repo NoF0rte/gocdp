@@ -90,6 +90,8 @@ type CDResult struct {
 	Redirect      string
 	ContentType   string
 	ContentLength int
+
+	source interface{}
 }
 
 func (result CDResult) IsRedirect() bool {
