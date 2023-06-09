@@ -84,7 +84,8 @@ func (parser FfufParser) Trim(input string, opts ...TrimOption) (string, error) 
 	}
 
 	options := &TrimOptions{
-		filters: make([]func(CDResult) bool, 0),
+		filters:  make([]func(CDResult) bool, 0),
+		operator: OrOperator,
 	}
 
 	for _, o := range opts {
@@ -96,9 +97,18 @@ func (parser FfufParser) Trim(input string, opts ...TrimOption) (string, error) 
 	var filtered []interface{}
 	for _, result := range results {
 		isFiltered := false
+		if options.operator == AndOperator {
+			isFiltered = true
+		}
+
 		for _, filter := range options.filters {
 			if filter(result) {
-				isFiltered = true
+				if options.operator == OrOperator {
+					isFiltered = true
+					break
+				}
+			} else if options.operator == AndOperator {
+				isFiltered = false
 				break
 			}
 		}
