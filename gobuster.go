@@ -53,3 +53,11 @@ func (parser GobusterParser) Parse(input string) (CDResults, error) {
 func (parser GobusterParser) CanParse(input string) bool {
 	return gbRegex.MatchString(input)
 }
+
+func (p GobusterParser) CanTransform() bool {
+	return false
+}
+
+func (p GobusterParser) Transform(input string, filtered []interface{}) (string, error) {
+	return "", nil
+}

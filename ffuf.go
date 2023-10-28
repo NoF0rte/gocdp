@@ -73,58 +73,12 @@ func (parser FfufParser) CanParse(input string) bool {
 	return output.CommandLine != ""
 }
 
-func (parser FfufParser) CanTrim(input string) bool {
-	return parser.CanParse(input)
+func (parser FfufParser) CanTransform() bool {
+	return true
 }
-
-func (parser FfufParser) Trim(input string, opts ...TrimOption) (string, error) {
-	results, err := parser.Parse(input)
-	if err != nil {
-		return "", err
-	}
-
-	options := &TrimOptions{
-		filters:  make([]func(CDResult) bool, 0),
-		operator: OrOperator,
-	}
-
-	for _, o := range opts {
-		o(options)
-	}
-
-	statusCounts := make(map[int]int)
-
-	var filtered []interface{}
-	for _, result := range results {
-		isFiltered := false
-		if options.operator == AndOperator {
-			isFiltered = true
-		}
-
-		for _, filter := range options.filters {
-			if filter(result) {
-				if options.operator == OrOperator {
-					isFiltered = true
-					break
-				}
-			} else if options.operator == AndOperator {
-				isFiltered = false
-				break
-			}
-		}
-
-		if !isFiltered && options.maxResults > 0 {
-			isFiltered = statusCounts[result.Status] >= options.maxResults
-		}
-
-		if !isFiltered {
-			statusCounts[result.Status] += 1
-			filtered = append(filtered, result.source)
-		}
-	}
-
+func (p FfufParser) Transform(input string, filtered []interface{}) (string, error) {
 	output := orderedmap.New()
-	err = json.Unmarshal([]byte(input), output)
+	err := json.Unmarshal([]byte(input), output)
 	if err != nil {
 		return "", err
 	}

@@ -15,6 +15,8 @@ const (
 type Parser interface {
 	Parse(input string) (CDResults, error)
 	CanParse(input string) bool
+	CanTransform() bool
+	Transform(input string, filtered []interface{}) (string, error)
 }
 
 type TrimOptions struct {
@@ -100,9 +102,4 @@ func WithFilterOperator(op TrimOperator) TrimOption {
 	return func(o *TrimOptions) {
 		o.operator = op
 	}
-}
-
-type Trimmer interface {
-	CanTrim(input string) bool
-	Trim(input string, opts ...TrimOption) (string, error)
 }

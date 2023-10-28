@@ -9,17 +9,12 @@ import (
 
 var c *CDP
 var errNoParser = errors.New("no parser found")
-var errNoTrimmer = errors.New("no trimmer found")
 
 var defaultParsers = []Parser{
 	FfufParser{},
 	GobusterParser{},
 	DirbParser{},
 	FeroxbusterParser{},
-}
-
-var defaultTrimmers = []Trimmer{
-	FfufParser{},
 }
 
 type Option func(*CDP)
@@ -31,13 +26,6 @@ func FailNoParserErrs() Option {
 	}
 }
 
-// FailNoTrimmerErrs will enable failing when no trimmer is found when trimming multiple files
-func FailNoTrimmerErrs() Option {
-	return func(c *CDP) {
-		c.failNoTrimmerErr = true
-	}
-}
-
 // DefaultParsers sets the default parsers used when no parser is specified
 func DefaultParsers(parsers ...Parser) Option {
 	return func(c *CDP) {
@@ -45,18 +33,9 @@ func DefaultParsers(parsers ...Parser) Option {
 	}
 }
 
-// DefaultTrimmers sets the default trimmers used when no trimmer is specified
-func DefaultTrimmers(trimmers ...Trimmer) Option {
-	return func(c *CDP) {
-		c.defaultTrimmers = trimmers
-	}
-}
-
 type CDP struct {
-	defaultParsers   []Parser
-	defaultTrimmers  []Trimmer
-	failNoParserErr  bool
-	failNoTrimmerErr bool
+	defaultParsers  []Parser
+	failNoParserErr bool
 }
 
 func New(options ...Option) *CDP {
@@ -69,9 +48,6 @@ func New(options ...Option) *CDP {
 		cdp.defaultParsers = defaultParsers
 	}
 
-	if len(cdp.defaultTrimmers) == 0 {
-		cdp.defaultTrimmers = defaultTrimmers
-	}
 	return cdp
 }
 
@@ -146,12 +122,12 @@ func SmartParse(reader io.Reader, parsers ...Parser) (CDResults, error) {
 	return c.SmartParse(reader, parsers...)
 }
 
-func (cdp *CDP) SmartTrimFiles(files []string, opts []TrimOption, trimmers ...Trimmer) error {
+func (cdp *CDP) SmartTrimFiles(files []string, opts []TrimOption, parsers ...Parser) error {
 	for _, file := range files {
-		err := cdp.SmartTrimFile(file, opts, trimmers...)
+		err := cdp.SmartTrimFile(file, opts, parsers...)
 		if err != nil {
-			if err == errNoTrimmer {
-				if cdp.failNoTrimmerErr {
+			if err == errNoParser {
+				if cdp.failNoParserErr {
 					return fmt.Errorf("no trimmer found for file '%s'", file)
 				}
 				continue
@@ -162,13 +138,13 @@ func (cdp *CDP) SmartTrimFiles(files []string, opts []TrimOption, trimmers ...Tr
 	return nil
 }
 
-func (cdp *CDP) SmartTrimFile(file string, opts []TrimOption, trimmers ...Trimmer) error {
+func (cdp *CDP) SmartTrimFile(file string, opts []TrimOption, parsers ...Parser) error {
 	f, err := os.Open(file)
 	if err != nil {
 		return err
 	}
 
-	output, err := cdp.SmartTrim(f, opts, trimmers...)
+	output, err := cdp.SmartTrim(f, opts, parsers...)
 	if err != nil {
 		return err
 	}
@@ -181,46 +157,91 @@ func (cdp *CDP) SmartTrimFile(file string, opts []TrimOption, trimmers ...Trimme
 	return os.WriteFile(file, []byte(output), 0644)
 }
 
-func (cdp *CDP) SmartTrim(reader io.Reader, opts []TrimOption, trimmers ...Trimmer) (string, error) {
+func (cdp *CDP) SmartTrim(reader io.Reader, opts []TrimOption, parsers ...Parser) (string, error) {
 	bytes, err := io.ReadAll(reader)
 	if err != nil {
 		return "", err
 	}
 
-	if len(trimmers) == 0 {
-		trimmers = cdp.defaultTrimmers
+	if len(parsers) == 0 {
+		parsers = cdp.defaultParsers
 	}
 
 	input := string(bytes)
-	var trimmer Trimmer
-	for _, t := range trimmers {
-		if t.CanTrim(input) {
-			trimmer = t
+	var parser Parser
+	for _, p := range parsers {
+		if p.CanTransform() && p.CanParse(input) {
+			parser = p
 			break
 		}
 	}
 
-	if trimmer == nil {
-		return "", errNoTrimmer
+	if parser == nil {
+		return "", errNoParser
 	}
 
-	output, err := trimmer.Trim(input, opts...)
+	results, err := parser.Parse(input)
+	if err != nil {
+		return "", err
+	}
+
+	options := &TrimOptions{
+		filters:  make([]func(CDResult) bool, 0),
+		operator: OrOperator,
+	}
+
+	for _, o := range opts {
+		o(options)
+	}
+
+	statusCounts := make(map[int]int)
+
+	var filtered []interface{}
+	for _, result := range results {
+		isFiltered := false
+		if options.operator == AndOperator {
+			isFiltered = true
+		}
+
+		for _, filter := range options.filters {
+			if filter(result) {
+				if options.operator == OrOperator {
+					isFiltered = true
+					break
+				}
+			} else if options.operator == AndOperator {
+				isFiltered = false
+				break
+			}
+		}
+
+		if !isFiltered && options.maxResults > 0 {
+			isFiltered = statusCounts[result.Status] >= options.maxResults
+		}
+
+		if !isFiltered {
+			statusCounts[result.Status] += 1
+			filtered = append(filtered, result.source)
+		}
+	}
+
+	output, err := parser.Transform(input, filtered)
 	if err != nil {
 		return "", err
 	}
 	return output, nil
 }
 
-func SmartTrimFiles(files []string, opts []TrimOption, trimmers ...Trimmer) error {
-	return c.SmartTrimFiles(files, opts, trimmers...)
+func SmartTrimFiles(files []string, opts []TrimOption, parsers ...Parser) error {
+	return c.SmartTrimFiles(files, opts, parsers...)
 }
 
-func SmartTrimFile(file string, opts []TrimOption, trimmers ...Trimmer) error {
-	return c.SmartTrimFile(file, opts, trimmers...)
+func SmartTrimFile(file string, opts []TrimOption, parsers ...Parser) error {
+	return c.SmartTrimFile(file, opts, parsers...)
 }
 
-func SmartTrim(reader io.Reader, opts []TrimOption, trimmers ...Trimmer) (string, error) {
-	return c.SmartTrim(reader, opts, trimmers...)
+func SmartTrim(reader io.Reader, opts []TrimOption, parsers ...Parser) (string, error) {
+	return c.SmartTrim(reader, opts, parsers...)
 }
 
 func init() {

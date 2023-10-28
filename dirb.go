@@ -59,3 +59,11 @@ func (parser DirbParser) Parse(input string) (CDResults, error) {
 func (parser DirbParser) CanParse(input string) bool {
 	return dirbRegex.MatchString(input)
 }
+
+func (p DirbParser) CanTransform() bool {
+	return false
+}
+
+func (p DirbParser) Transform(input string, filtered []interface{}) (string, error) {
+	return "", nil
+}

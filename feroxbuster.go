@@ -2,7 +2,9 @@ package gocdp
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
+	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
@@ -147,4 +149,42 @@ func (p FeroxbusterParser) Parse(input string) (CDResults, error) {
 func (p FeroxbusterParser) CanParse(input string) bool {
 	line := strings.Split(input, "\n")[0]
 	return p.isJSONResult(line) || p.isTextResult(line)
+}
+
+func (p FeroxbusterParser) CanTransform() bool {
+	return true
+}
+
+func (p FeroxbusterParser) exportJSON(filtered []interface{}) (string, error) {
+	writer := bytes.NewBuffer(nil)
+
+	for _, line := range filtered {
+		bytes, err := json.Marshal(line)
+		if err != nil {
+			return "", err
+		}
+
+		writer.WriteString(fmt.Sprintln(string(bytes)))
+	}
+
+	return writer.String(), nil
+}
+
+func (p FeroxbusterParser) exportText(filtered []interface{}) (string, error) {
+	writer := bytes.NewBuffer(nil)
+
+	for _, line := range filtered {
+		writer.WriteString(fmt.Sprintln(line))
+	}
+
+	return writer.String(), nil
+}
+
+func (p FeroxbusterParser) Transform(input string, filtered []interface{}) (string, error) {
+	line := strings.Split(input, "\n")[0]
+	if p.isJSONResult(line) {
+		return p.exportJSON(filtered)
+	}
+
+	return p.exportText(filtered)
 }
