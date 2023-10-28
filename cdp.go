@@ -15,6 +15,7 @@ var defaultParsers = []Parser{
 	FfufParser{},
 	GobusterParser{},
 	DirbParser{},
+	FeroxbusterParser{},
 }
 
 var defaultTrimmers = []Trimmer{
