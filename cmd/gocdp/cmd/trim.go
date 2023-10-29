@@ -12,7 +12,7 @@ import (
 var trimCmd = &cobra.Command{
 	Use:   "trim files...",
 	Args:  cobra.MinimumNArgs(1),
-	Short: "Trim/filter results. Currently only supports trimming ffuf results",
+	Short: "Trim/filter results",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		max, _ := cmd.Flags().GetInt("max")
 		redirects, _ := cmd.Flags().GetStringSlice("redirect")

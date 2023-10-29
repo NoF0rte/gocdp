@@ -155,7 +155,7 @@ func (p FeroxbusterParser) CanTransform() bool {
 	return true
 }
 
-func (p FeroxbusterParser) exportJSON(filtered []interface{}) (string, error) {
+func (p FeroxbusterParser) transformJSON(filtered []interface{}) (string, error) {
 	writer := bytes.NewBuffer(nil)
 
 	for _, line := range filtered {
@@ -170,7 +170,7 @@ func (p FeroxbusterParser) exportJSON(filtered []interface{}) (string, error) {
 	return writer.String(), nil
 }
 
-func (p FeroxbusterParser) exportText(filtered []interface{}) (string, error) {
+func (p FeroxbusterParser) transformText(filtered []interface{}) (string, error) {
 	writer := bytes.NewBuffer(nil)
 
 	for _, line := range filtered {
@@ -183,8 +183,8 @@ func (p FeroxbusterParser) exportText(filtered []interface{}) (string, error) {
 func (p FeroxbusterParser) Transform(input string, filtered []interface{}) (string, error) {
 	line := strings.Split(input, "\n")[0]
 	if p.isJSONResult(line) {
-		return p.exportJSON(filtered)
+		return p.transformJSON(filtered)
 	}
 
-	return p.exportText(filtered)
+	return p.transformText(filtered)
 }
