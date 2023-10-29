@@ -9,11 +9,13 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/gocarina/gocsv"
 	"github.com/iancoleman/orderedmap"
 )
 
 var (
 	dirSearchPlainRegex *regexp.Regexp = regexp.MustCompile(`(?m)^(?P<status>[0-9]+)\s*(?P<length>[0-9]+)(?P<units>[^ ]+)\s*(?P<url>[^ ]+)(?:\s*->\s*REDIRECTS TO:\s*(?P<redirect>[^ ]+))?$`)
+	dirSearchCSVRegex   *regexp.Regexp = regexp.MustCompile(`(?m)^URL,Status,Size,Content Type,Redirection$`)
 )
 
 type dirSearchOutput struct {
@@ -24,11 +26,11 @@ type dirSearchOutput struct {
 	Results []dirSearchResult `json:"results"`
 }
 type dirSearchResult struct {
-	URL           string `json:"url"`
-	Status        int    `json:"status"`
-	ContentLength int    `json:"content-length"`
-	ContentType   string `json:"content-type"`
-	Redirect      string `json:"redirect"`
+	URL           string `json:"url" csv:"URL"`
+	Status        int    `json:"status" csv:"Status"`
+	ContentLength int    `json:"content-length" csv:"Size"`
+	ContentType   string `json:"content-type" csv:"Content Type"`
+	Redirect      string `json:"redirect" csv:"Redirection"`
 	raw           interface{}
 }
 
@@ -80,6 +82,10 @@ func (DirSearchParser) isJSONResult(input string) bool {
 	}
 
 	return output.Info.Args != ""
+}
+
+func (DirSearchParser) isCSVResult(input string) bool {
+	return dirSearchCSVRegex.MatchString(input)
 }
 
 func (DirSearchParser) parseJSON(input string) (CDResults, error) {
@@ -141,18 +147,43 @@ func (p DirSearchParser) parsePlain(input string) (CDResults, error) {
 	return results, nil
 }
 
+func (p DirSearchParser) parseCSV(input string) (CDResults, error) {
+	var results CDResults
+	var rows []dirSearchResult
+
+	err := gocsv.UnmarshalString(input, &rows)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, result := range rows {
+		results = append(results, CDResult{
+			Url:           result.URL,
+			Status:        result.Status,
+			Redirect:      result.Redirect,
+			ContentType:   result.ContentType,
+			ContentLength: result.ContentLength,
+			source:        result,
+		})
+	}
+
+	return results, nil
+}
+
 func (p DirSearchParser) Parse(input string) (CDResults, error) {
 	if p.isJSONResult(input) {
 		return p.parseJSON(input)
 	} else if p.isPlainResult(input) {
 		return p.parsePlain(input)
+	} else if p.isCSVResult(input) {
+		return p.parseCSV(input)
 	}
 
 	return nil, nil
 }
 
 func (p DirSearchParser) CanParse(input string) bool {
-	return p.isJSONResult(input) || p.isPlainResult(input)
+	return p.isJSONResult(input) || p.isPlainResult(input) || p.isCSVResult(input)
 }
 
 func (p DirSearchParser) CanTransform() bool {
@@ -190,11 +221,28 @@ func (p DirSearchParser) transformPlain(input string, filtered []interface{}) (s
 	return fmt.Sprintf("%s\n\n%s", input[0:before], writer.String()), nil
 }
 
+func (p DirSearchParser) transformCSV(input string, filtered []interface{}) (string, error) {
+	// gocsv cannot marshal a slice of interfaces, they must be structs
+	var results []dirSearchResult
+	for _, r := range filtered {
+		results = append(results, r.(dirSearchResult))
+	}
+
+	rows, err := gocsv.MarshalString(&results)
+	if err != nil {
+		return "", err
+	}
+
+	return rows, nil
+}
+
 func (p DirSearchParser) Transform(input string, filtered []interface{}) (string, error) {
 	if p.isJSONResult(input) {
 		return p.transformJSON(input, filtered)
 	} else if p.isPlainResult(input) {
 		return p.transformPlain(input, filtered)
+	} else if p.isCSVResult(input) {
+		return p.transformCSV(input, filtered)
 	}
 
 	return "", nil
