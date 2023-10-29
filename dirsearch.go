@@ -1,0 +1,201 @@
+package gocdp
+
+import (
+	"bufio"
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"regexp"
+	"strconv"
+	"strings"
+
+	"github.com/iancoleman/orderedmap"
+)
+
+var (
+	dirSearchPlainRegex *regexp.Regexp = regexp.MustCompile(`(?m)^(?P<status>[0-9]+)\s*(?P<length>[0-9]+)(?P<units>[^ ]+)\s*(?P<url>[^ ]+)(?:\s*->\s*REDIRECTS TO:\s*(?P<redirect>[^ ]+))?$`)
+)
+
+type dirSearchOutput struct {
+	Info struct {
+		Args string `json:"args"`
+		Time string `json:"time"`
+	} `json:"info"`
+	Results []dirSearchResult `json:"results"`
+}
+type dirSearchResult struct {
+	URL           string `json:"url"`
+	Status        int    `json:"status"`
+	ContentLength int    `json:"content-length"`
+	ContentType   string `json:"content-type"`
+	Redirect      string `json:"redirect"`
+	raw           interface{}
+}
+
+type _dirSearchResult dirSearchResult
+
+func (r *dirSearchResult) UnmarshalJSON(bytes []byte) (err error) {
+	foo := _dirSearchResult{}
+
+	if err = json.Unmarshal(bytes, &foo); err == nil {
+		*r = dirSearchResult(foo)
+	}
+
+	m := orderedmap.New()
+
+	if err = json.Unmarshal(bytes, &m); err == nil {
+		r.raw = m
+	}
+
+	return err
+}
+
+type DirSearchParser struct {
+}
+
+func (DirSearchParser) convertLength(length int, units string) int {
+	switch strings.ToLower(units) {
+	case "kb":
+		return length * 1024
+	case "mb":
+		return length * 1024 * 1024
+	case "gb":
+		return length * 1024 * 1024 * 1024
+	case "tb":
+		return length * 1024 * 1024 * 1024 * 1024
+	default:
+		return length
+	}
+}
+
+func (DirSearchParser) isPlainResult(input string) bool {
+	return dirSearchPlainRegex.MatchString(input)
+}
+
+func (DirSearchParser) isJSONResult(input string) bool {
+	var output dirSearchOutput
+	err := json.Unmarshal([]byte(input), &output)
+	if err != nil {
+		return false
+	}
+
+	return output.Info.Args != ""
+}
+
+func (DirSearchParser) parseJSON(input string) (CDResults, error) {
+	var output dirSearchOutput
+	err := json.Unmarshal([]byte(input), &output)
+	if err != nil {
+		return nil, err
+	}
+
+	var results CDResults
+	for _, result := range output.Results {
+		results = append(results, CDResult{
+			Url:           result.URL,
+			Status:        result.Status,
+			Redirect:      result.Redirect,
+			ContentType:   result.ContentType,
+			ContentLength: result.ContentLength,
+			source:        result.raw,
+		})
+	}
+	return results, nil
+}
+
+func (p DirSearchParser) parsePlain(input string) (CDResults, error) {
+	var results CDResults
+	scanner := bufio.NewScanner(strings.NewReader(input))
+	for scanner.Scan() {
+		line := scanner.Text()
+		match := dirSearchPlainRegex.FindStringSubmatch(line)
+		if len(match) == 0 {
+			continue
+		}
+
+		namedMatches := make(map[string]string)
+		for j, name := range dirSearchPlainRegex.SubexpNames() {
+			if j != 0 && name != "" {
+				namedMatches[name] = match[j]
+			}
+		}
+
+		status, _ := strconv.Atoi(namedMatches["status"])
+		length, _ := strconv.Atoi(namedMatches["length"])
+
+		result := CDResult{
+			Url:           namedMatches["url"],
+			Status:        status,
+			ContentType:   "",
+			ContentLength: p.convertLength(length, namedMatches["units"]),
+			source:        line,
+		}
+
+		if result.IsRedirect() {
+			result.Redirect = namedMatches["redirect"]
+		}
+
+		results = append(results, result)
+	}
+
+	return results, nil
+}
+
+func (p DirSearchParser) Parse(input string) (CDResults, error) {
+	if p.isJSONResult(input) {
+		return p.parseJSON(input)
+	} else if p.isPlainResult(input) {
+		return p.parsePlain(input)
+	}
+
+	return nil, nil
+}
+
+func (p DirSearchParser) CanParse(input string) bool {
+	return p.isJSONResult(input) || p.isPlainResult(input)
+}
+
+func (p DirSearchParser) CanTransform() bool {
+	return true
+}
+
+func (p DirSearchParser) transformJSON(input string, filtered []interface{}) (string, error) {
+	output := orderedmap.New()
+	err := json.Unmarshal([]byte(input), output)
+	if err != nil {
+		return "", err
+	}
+
+	output.Set("results", filtered)
+
+	bytes, err := json.MarshalIndent(output, "", "  ")
+	if err != nil {
+		return "", err
+	}
+
+	return string(bytes), nil
+}
+
+func (p DirSearchParser) transformPlain(input string, filtered []interface{}) (string, error) {
+	beforeRegex := regexp.MustCompile(`(?m)^#\s*Dirsearch started .*$`)
+
+	writer := bytes.NewBuffer(nil)
+
+	for _, l := range filtered {
+		writer.WriteString(fmt.Sprintln(l))
+	}
+
+	before := beforeRegex.FindStringIndex(input)[1]
+
+	return fmt.Sprintf("%s\n\n%s", input[0:before], writer.String()), nil
+}
+
+func (p DirSearchParser) Transform(input string, filtered []interface{}) (string, error) {
+	if p.isJSONResult(input) {
+		return p.transformJSON(input, filtered)
+	} else if p.isPlainResult(input) {
+		return p.transformPlain(input, filtered)
+	}
+
+	return "", nil
+}

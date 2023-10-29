@@ -15,6 +15,7 @@ var defaultParsers = []Parser{
 	GobusterParser{},
 	DirbParser{},
 	FeroxbusterParser{},
+	DirSearchParser{},
 }
 
 type Option func(*CDP)
