@@ -18,6 +18,7 @@ type GobusterParser struct {
 
 func (GobusterParser) Parse(input string) (CDResults, error) {
 	var results CDResults
+
 	scanner := bufio.NewScanner(strings.NewReader(input))
 	for scanner.Scan() {
 		line := scanner.Text()
