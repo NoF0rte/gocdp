@@ -17,6 +17,7 @@ import (
 var (
 	dirSearchPlainRegex *regexp.Regexp = regexp.MustCompile(`(?m)^(?P<status>[0-9]+)\s*(?P<length>[0-9]+)(?P<units>[^ ]+)\s*(?P<url>[^ ]+)(?:\s*->\s*REDIRECTS TO:\s*(?P<redirect>[^ ]+))?$`)
 	dirSearchCSVRegex   *regexp.Regexp = regexp.MustCompile(`(?m)^URL,Status,Size,Content Type,Redirection$`)
+	dirSearchMDRegex    *regexp.Regexp = regexp.MustCompile(`(?m)^(?P<url>[^ ]+)\s*\|\s*(?P<status>[0-9]+)\s*\|\s*(?P<length>[0-9]+)\s*\|\s*(?P<content_type>[^ ]+)\s*\|\s*(?P<redirect>[^ ]+)?$`)
 )
 
 type dirSearchJSONOutput struct {
@@ -102,6 +103,10 @@ func (DirSearchParser) isXMLResult(input string) bool {
 	}
 
 	return output.Args != ""
+}
+
+func (DirSearchParser) isMDResult(input string) bool {
+	return dirSearchMDRegex.MatchString(input)
 }
 
 func (DirSearchParser) parseJSON(input string) (CDResults, error) {
@@ -207,6 +212,44 @@ func (DirSearchParser) parseXML(input string) (CDResults, error) {
 	return results, nil
 }
 
+func (p DirSearchParser) parseMD(input string) (CDResults, error) {
+	var results CDResults
+	scanner := bufio.NewScanner(strings.NewReader(input))
+	for scanner.Scan() {
+		line := scanner.Text()
+		match := dirSearchMDRegex.FindStringSubmatch(line)
+		if len(match) == 0 {
+			continue
+		}
+
+		namedMatches := make(map[string]string)
+		for j, name := range dirSearchMDRegex.SubexpNames() {
+			if j != 0 && name != "" {
+				namedMatches[name] = match[j]
+			}
+		}
+
+		status, _ := strconv.Atoi(namedMatches["status"])
+		length, _ := strconv.Atoi(namedMatches["length"])
+
+		result := CDResult{
+			Url:           namedMatches["url"],
+			Status:        status,
+			ContentType:   namedMatches["content_type"],
+			ContentLength: length,
+			source:        line,
+		}
+
+		if result.IsRedirect() {
+			result.Redirect = namedMatches["redirect"]
+		}
+
+		results = append(results, result)
+	}
+
+	return results, nil
+}
+
 func (p DirSearchParser) Parse(input string) (CDResults, error) {
 	if p.isJSONResult(input) {
 		return p.parseJSON(input)
@@ -216,6 +259,8 @@ func (p DirSearchParser) Parse(input string) (CDResults, error) {
 		return p.parseCSV(input)
 	} else if p.isXMLResult(input) {
 		return p.parseXML(input)
+	} else if p.isMDResult(input) {
+		return p.parseMD(input)
 	}
 
 	return nil, nil
@@ -223,7 +268,8 @@ func (p DirSearchParser) Parse(input string) (CDResults, error) {
 
 func (p DirSearchParser) CanParse(input string) bool {
 	return p.isJSONResult(input) || p.isPlainResult(input) ||
-		p.isCSVResult(input) || p.isXMLResult(input)
+		p.isCSVResult(input) || p.isXMLResult(input) ||
+		p.isMDResult(input)
 }
 
 func (p DirSearchParser) CanTransform() bool {
@@ -300,6 +346,20 @@ func (p DirSearchParser) transformXML(input string, filtered []interface{}) (str
 	return fmt.Sprintf("%s\n%s\n", `<?xml version="1.0" ?>`, string(bytes)), nil
 }
 
+func (p DirSearchParser) transformMD(input string, filtered []interface{}) (string, error) {
+	beforeRegex := regexp.MustCompile(`(?m)([\-]+\|?)+$`)
+
+	writer := bytes.NewBuffer(nil)
+
+	for _, l := range filtered {
+		writer.WriteString(fmt.Sprintln(l))
+	}
+
+	before := beforeRegex.FindStringIndex(input)[1]
+
+	return fmt.Sprintf("%s\n%s", input[0:before], writer.String()), nil
+}
+
 func (p DirSearchParser) Transform(input string, filtered []interface{}) (string, error) {
 	if p.isJSONResult(input) {
 		return p.transformJSON(input, filtered)
@@ -309,6 +369,8 @@ func (p DirSearchParser) Transform(input string, filtered []interface{}) (string
 		return p.transformCSV(input, filtered)
 	} else if p.isXMLResult(input) {
 		return p.transformXML(input, filtered)
+	} else if p.isMDResult(input) {
+		return p.transformMD(input, filtered)
 	}
 
 	return "", nil
