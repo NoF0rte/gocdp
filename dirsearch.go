@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -18,19 +19,24 @@ var (
 	dirSearchCSVRegex   *regexp.Regexp = regexp.MustCompile(`(?m)^URL,Status,Size,Content Type,Redirection$`)
 )
 
-type dirSearchOutput struct {
+type dirSearchJSONOutput struct {
 	Info struct {
 		Args string `json:"args"`
 		Time string `json:"time"`
 	} `json:"info"`
 	Results []dirSearchResult `json:"results"`
 }
+type dirSearchXMLOutput struct {
+	Args    string            `xml:"args,attr"`
+	Time    string            `xml:"time,attr"`
+	Results []dirSearchResult `xml:"target"`
+}
 type dirSearchResult struct {
-	URL           string `json:"url" csv:"URL"`
-	Status        int    `json:"status" csv:"Status"`
-	ContentLength int    `json:"content-length" csv:"Size"`
-	ContentType   string `json:"content-type" csv:"Content Type"`
-	Redirect      string `json:"redirect" csv:"Redirection"`
+	URL           string `json:"url" csv:"URL" xml:"url,attr"`
+	Status        int    `json:"status" csv:"Status" xml:"status"`
+	ContentLength int    `json:"content-length" csv:"Size" xml:"contentLength"`
+	ContentType   string `json:"content-type" csv:"Content Type" xml:"contentType"`
+	Redirect      string `json:"redirect" csv:"Redirection" xml:"redirect,omitempty"`
 	raw           interface{}
 }
 
@@ -75,7 +81,7 @@ func (DirSearchParser) isPlainResult(input string) bool {
 }
 
 func (DirSearchParser) isJSONResult(input string) bool {
-	var output dirSearchOutput
+	var output dirSearchJSONOutput
 	err := json.Unmarshal([]byte(input), &output)
 	if err != nil {
 		return false
@@ -88,8 +94,18 @@ func (DirSearchParser) isCSVResult(input string) bool {
 	return dirSearchCSVRegex.MatchString(input)
 }
 
+func (DirSearchParser) isXMLResult(input string) bool {
+	var output dirSearchXMLOutput
+	err := xml.Unmarshal([]byte(input), &output)
+	if err != nil {
+		return false
+	}
+
+	return output.Args != ""
+}
+
 func (DirSearchParser) parseJSON(input string) (CDResults, error) {
-	var output dirSearchOutput
+	var output dirSearchJSONOutput
 	err := json.Unmarshal([]byte(input), &output)
 	if err != nil {
 		return nil, err
@@ -170,6 +186,27 @@ func (p DirSearchParser) parseCSV(input string) (CDResults, error) {
 	return results, nil
 }
 
+func (DirSearchParser) parseXML(input string) (CDResults, error) {
+	var output dirSearchXMLOutput
+	err := xml.Unmarshal([]byte(input), &output)
+	if err != nil {
+		return nil, err
+	}
+
+	var results CDResults
+	for _, result := range output.Results {
+		results = append(results, CDResult{
+			Url:           result.URL,
+			Status:        result.Status,
+			Redirect:      result.Redirect,
+			ContentType:   result.ContentType,
+			ContentLength: result.ContentLength,
+			source:        result,
+		})
+	}
+	return results, nil
+}
+
 func (p DirSearchParser) Parse(input string) (CDResults, error) {
 	if p.isJSONResult(input) {
 		return p.parseJSON(input)
@@ -177,13 +214,16 @@ func (p DirSearchParser) Parse(input string) (CDResults, error) {
 		return p.parsePlain(input)
 	} else if p.isCSVResult(input) {
 		return p.parseCSV(input)
+	} else if p.isXMLResult(input) {
+		return p.parseXML(input)
 	}
 
 	return nil, nil
 }
 
 func (p DirSearchParser) CanParse(input string) bool {
-	return p.isJSONResult(input) || p.isPlainResult(input) || p.isCSVResult(input)
+	return p.isJSONResult(input) || p.isPlainResult(input) ||
+		p.isCSVResult(input) || p.isXMLResult(input)
 }
 
 func (p DirSearchParser) CanTransform() bool {
@@ -236,6 +276,30 @@ func (p DirSearchParser) transformCSV(input string, filtered []interface{}) (str
 	return rows, nil
 }
 
+func (p DirSearchParser) transformXML(input string, filtered []interface{}) (string, error) {
+	type dirsearchscan dirSearchXMLOutput
+
+	var results []dirSearchResult
+	for _, r := range filtered {
+		results = append(results, r.(dirSearchResult))
+	}
+
+	var output dirsearchscan
+	err := xml.Unmarshal([]byte(input), &output)
+	if err != nil {
+		return "", err
+	}
+
+	output.Results = results
+
+	bytes, err := xml.MarshalIndent(output, "", "\t")
+	if err != nil {
+		return "", err
+	}
+
+	return fmt.Sprintf("%s\n%s\n", `<?xml version="1.0" ?>`, string(bytes)), nil
+}
+
 func (p DirSearchParser) Transform(input string, filtered []interface{}) (string, error) {
 	if p.isJSONResult(input) {
 		return p.transformJSON(input, filtered)
@@ -243,6 +307,8 @@ func (p DirSearchParser) Transform(input string, filtered []interface{}) (string
 		return p.transformPlain(input, filtered)
 	} else if p.isCSVResult(input) {
 		return p.transformCSV(input, filtered)
+	} else if p.isXMLResult(input) {
+		return p.transformXML(input, filtered)
 	}
 
 	return "", nil
