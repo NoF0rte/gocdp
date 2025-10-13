@@ -91,7 +91,8 @@ type CDResult struct {
 	ContentType   string
 	ContentLength int
 
-	source interface{}
+	source     interface{}
+	isFiltered bool
 }
 
 func (result CDResult) IsRedirect() bool {

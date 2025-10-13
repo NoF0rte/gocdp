@@ -188,6 +188,9 @@ func (cdp *CDP) SmartTrim(reader io.Reader, opts []TrimOption, parsers ...Parser
 
 	options := &TrimOptions{
 		filters:  make([]func(CDResult) bool, 0),
+		codes:    make(map[int]bool),
+		sizes:    make(map[int]bool),
+		types:    make(map[string]bool),
 		operator: OrOperator,
 	}
 
@@ -195,38 +198,97 @@ func (cdp *CDP) SmartTrim(reader io.Reader, opts []TrimOption, parsers ...Parser
 		o(options)
 	}
 
-	statusCounts := make(map[int]int)
+	stats := make(map[int]*StatusStats)
 
-	var filtered []interface{}
+	var processed []CDResult
 	for _, result := range results {
-		isFiltered := false
+		result.isFiltered = false
 		if options.operator == AndOperator {
-			isFiltered = true
+			result.isFiltered = true
 		}
 
 		for _, filter := range options.filters {
 			if filter(result) {
 				if options.operator == OrOperator {
-					isFiltered = true
+					result.isFiltered = true
 					break
 				}
 			} else if options.operator == AndOperator {
-				isFiltered = false
+				result.isFiltered = false
 				break
 			}
 		}
 
-		if !isFiltered && options.maxResults > 0 {
-			isFiltered = statusCounts[result.Status] >= options.maxResults
+		stat := stats[result.Status]
+		if stat == nil {
+			stat = &StatusStats{
+				TypeCounts: make(map[string]int),
+				SizeCounts: make(map[int]int),
+			}
+			stats[result.Status] = stat
 		}
 
-		if !isFiltered {
-			statusCounts[result.Status] += 1
-			filtered = append(filtered, result.source)
-		}
+		stat.Count += 1
+		stat.SizeCounts[result.ContentLength] += 1
+		stat.TypeCounts[result.ContentType] += 1
+
+		processed = append(processed, result)
+
+		// If we are and'ing, only enforce keep max on results that have matched so far
+		// If we are or'ing, enforce keep max on everything
+		// if options.keepMax > 0 && ((result.isFiltered && options.operator == AndOperator) ||
+		// 	(!result.isFiltered && options.operator == OrOperator)) {
+		// 	result.isFiltered = statusCounts[result.Status] >= options.keepMax
+		// }
+
+		// statusCounts[result.Status] += 1
+		// byCode[result.Status] = append(byCode[result.Status], result.source)
+
+		// if !isFiltered && options.keepMax > 0 {
+		// 	isFiltered = statusCounts[result.Status] >= options.keepMax
+		// }
+
+		// if !isFiltered {
+		// 	statusCounts[result.Status] += 1
+		// 	filteredByCode[result.Status] = append(filteredByCode[result.Status], result.source)
+		// }
 	}
 
-	output, err := parser.Transform(input, filtered)
+	statusEnabled := len(options.codes) > 0
+	typeEnabled := len(options.types) > 0
+	sizeEnabled := len(options.sizes) > 0
+
+	var notFiltered []interface{}
+	for _, result := range processed {
+		if options.filterMax > 0 {
+			stat := stats[result.Status]
+
+			isStatusMaxed := stat.Count >= options.filterMax
+			isTypeMaxed := stat.TypeCounts[result.ContentType] >= options.filterMax
+			isSizeMaxed := stat.SizeCounts[result.ContentLength] >= options.filterMax
+			if result.isFiltered && options.operator == AndOperator {
+				if (statusEnabled && typeEnabled && !sizeEnabled) ||
+					(typeEnabled && !sizeEnabled) {
+					result.isFiltered = isTypeMaxed
+				} else if (statusEnabled && sizeEnabled && !typeEnabled) ||
+					(sizeEnabled && !typeEnabled) {
+					result.isFiltered = isSizeMaxed
+				} else {
+					result.isFiltered = isStatusMaxed
+				}
+			} else if !result.isFiltered && options.operator == OrOperator {
+				result.isFiltered = isStatusMaxed
+			}
+		}
+
+		if result.isFiltered {
+			continue
+		}
+
+		notFiltered = append(notFiltered, result.source)
+	}
+
+	output, err := parser.Transform(input, notFiltered)
 	if err != nil {
 		return "", err
 	}

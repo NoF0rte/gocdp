@@ -14,7 +14,8 @@ var trimCmd = &cobra.Command{
 	Args:  cobra.MinimumNArgs(1),
 	Short: "Trim/filter results",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		max, _ := cmd.Flags().GetInt("max")
+		truncate, _ := cmd.Flags().GetInt("truncate")
+		filterMax, _ := cmd.Flags().GetInt("count")
 		redirects, _ := cmd.Flags().GetStringSlice("redirect")
 		urls, _ := cmd.Flags().GetStringSlice("url")
 		contentTypes, _ := cmd.Flags().GetStringSlice("content-type")
@@ -41,8 +42,12 @@ var trimCmd = &cobra.Command{
 		}
 
 		opts = append(opts, gocdp.WithFilterOperator(op))
-		if max > 0 {
-			opts = append(opts, gocdp.WithMaxResults(max))
+		if truncate > 0 {
+			opts = append(opts, gocdp.WithTruncate(truncate))
+		}
+
+		if filterMax > 0 {
+			opts = append(opts, gocdp.WithFilterMaxResults(filterMax))
 		}
 
 		if len(redirects) > 0 {
@@ -72,9 +77,10 @@ var trimCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(trimCmd)
 
-	trimCmd.Flags().IntP("max", "m", 0, "Maximum number of results per status code.")
-	trimCmd.Flags().StringSliceP("redirect", "r", []string{}, "Regex to filter redirect URLs")
-	trimCmd.Flags().StringSliceP("url", "u", []string{}, "Regex to filter URLs")
+	trimCmd.Flags().IntP("truncate", "t", 0, "Maximum number of results per status code to keep. Excess will be trimmed")
+	trimCmd.Flags().IntP("count", "n", 0, "Filter by number of results per status code. Matches greater than or equal to")
+	trimCmd.Flags().StringSliceP("redirect", "r", []string{}, "Filter redirect URLs by regex")
+	trimCmd.Flags().StringSliceP("url", "u", []string{}, "Filter URLs by regex")
 	trimCmd.Flags().StringSliceP("content-type", "c", []string{}, "Filter content types")
 	trimCmd.Flags().IntSliceP("status", "s", []int{}, "Filter status codes")
 	trimCmd.Flags().IntSliceP("length", "l", []int{}, "Filter content lengths")

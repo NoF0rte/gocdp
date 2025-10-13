@@ -12,6 +12,12 @@ const (
 	AndOperator
 )
 
+type StatusStats struct {
+	Count      int
+	TypeCounts map[string]int
+	SizeCounts map[int]int
+}
+
 type Parser interface {
 	Parse(input string) (CDResults, error)
 	CanParse(input string) bool
@@ -20,16 +26,26 @@ type Parser interface {
 }
 
 type TrimOptions struct {
-	maxResults int
-	filters    []func(CDResult) bool
-	operator   TrimOperator
+	truncate  int
+	filterMax int
+	codes     map[int]bool
+	sizes     map[int]bool
+	types     map[string]bool
+	filters   []func(CDResult) bool
+	operator  TrimOperator
 }
 
 type TrimOption func(*TrimOptions)
 
-func WithMaxResults(max int) TrimOption {
+func WithTruncate(max int) TrimOption {
 	return func(o *TrimOptions) {
-		o.maxResults = max
+		o.truncate = max
+	}
+}
+
+func WithFilterMaxResults(max int) TrimOption {
+	return func(o *TrimOptions) {
+		o.filterMax = max
 	}
 }
 
@@ -65,6 +81,10 @@ func WithFilterURL(regexes ...string) TrimOption {
 
 func WithFilterContentType(contentTypes ...string) TrimOption {
 	return func(o *TrimOptions) {
+		for _, t := range contentTypes {
+			o.types[t] = true
+		}
+
 		o.filters = append(o.filters, func(c CDResult) bool {
 			for _, contentType := range contentTypes {
 				if strings.EqualFold(c.ContentType, contentType) {
@@ -79,6 +99,10 @@ func WithFilterContentType(contentTypes ...string) TrimOption {
 
 func WithFilterStatus(statusCodes ...int) TrimOption {
 	return func(o *TrimOptions) {
+		for _, code := range statusCodes {
+			o.codes[code] = true
+		}
+
 		o.filters = append(o.filters, func(c CDResult) bool {
 			return c.IsStatus(statusCodes...)
 		})
@@ -87,6 +111,10 @@ func WithFilterStatus(statusCodes ...int) TrimOption {
 
 func WithFilterLength(lengths ...int) TrimOption {
 	return func(o *TrimOptions) {
+		for _, l := range lengths {
+			o.sizes[l] = true
+		}
+
 		o.filters = append(o.filters, func(c CDResult) bool {
 			for _, length := range lengths {
 				if c.ContentLength == length {
