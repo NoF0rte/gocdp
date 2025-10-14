@@ -13,6 +13,9 @@ export interface AppState {
   totalResults: number
   isLoading: boolean
   
+  // Error state
+  errors: string[]
+  
   // Pagination state
   currentPage: Record<number, number>
   itemsPerPage: number
@@ -60,6 +63,7 @@ export const useAppStore = create<AppState>((set) => ({
   statusGroups: [],
   totalResults: 0,
   isLoading: false,
+  errors: [],
   currentPage: {},
   itemsPerPage: 10,
 
@@ -69,7 +73,7 @@ export const useAppStore = create<AppState>((set) => ({
       formData.append('files', file)
     })
 
-    set({ isUploading: true, isLoading: true })
+    set({ isUploading: true, isLoading: true, errors: [] })
     try {
       const response = await api.post<ParseFilesResponse>('/parse/files', formData, {
         headers: {
@@ -84,23 +88,27 @@ export const useAppStore = create<AppState>((set) => ({
         },
       })
 
-      const groups = createStatusGroups(response.data.results)
-      const totalResults = groups.reduce((sum, group) => sum + group.count, 0)
+      
+
+      if (response.data.results) {
+        const groups = createStatusGroups(response.data.results)
+        const totalResults = groups.reduce((sum, group) => sum + group.count, 0)
+        set({ statusGroups: groups, totalResults })
+      }
+
       set({
-        statusGroups: groups,
-        totalResults,
         isLoading: false,
         isUploading: false,
+        errors: response.data.errors || [],
       })
     } catch (error) {
       set({ isUploading: false, isLoading: false })
       console.error('Upload error:', error)
-      throw new Error('Failed to upload files')
     }
   },
 
   parsePath: async (directoryPath: string) => {
-    set({ isUploading: true, isLoading: true })
+    set({ isUploading: true, isLoading: true, errors: [] })
 
     try {
       const response = await api.post<ParsePathResponse>('/parse/path', {
@@ -114,11 +122,11 @@ export const useAppStore = create<AppState>((set) => ({
         totalResults,
         isLoading: false,
         isUploading: false,
+        errors: response.data.error ? [response.data.error] : [],
       })
     } catch (error) {
       set({ isUploading: false, isLoading: false })
       console.error('Upload error:', error)
-      throw new Error('Failed to scan directory')
     }
   },
   
@@ -179,6 +187,7 @@ export const useAppStore = create<AppState>((set) => ({
     statusGroups: [],
     totalResults: 0,
     isLoading: false,
+    errors: [],
     currentPage: {}
   })
 }))

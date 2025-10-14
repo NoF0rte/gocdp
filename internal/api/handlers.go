@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"path/filepath"
 
@@ -12,26 +13,26 @@ import (
 type APIHandler struct {
 }
 
-func (h *APIHandler) Parse(c *gin.Context) {
+func (h *APIHandler) ParseFiles(c *gin.Context) {
 	form, err := c.MultipartForm()
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"errors": []string{err.Error()}})
 		return
 	}
 
 	var allResults gocdp.CDResults
-	var errs []error
+	var errs []string
 	for _, fileHeaders := range form.File {
 		for _, header := range fileHeaders {
 			file, err := header.Open()
 			if err != nil {
-				errs = append(errs, err)
+				errs = append(errs, err.Error())
 				continue
 			}
 
 			results, err := gocdp.SmartParse(file)
 			if err != nil {
-				errs = append(errs, err)
+				errs = append(errs, fmt.Sprintf("%s: %s", header.Filename, err.Error()))
 				continue
 			}
 
@@ -42,24 +43,24 @@ func (h *APIHandler) Parse(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"results": allResults, "errors": errs})
 }
 
-func (h *APIHandler) ParsePath(c *gin.Context) {
+func (h *APIHandler) ParseGlob(c *gin.Context) {
 	var req struct {
 		Path string `json:"path"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"errors": []string{err.Error()}})
 		return
 	}
 
 	files, err := filepath.Glob(req.Path)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"errors": []string{err.Error()}})
 		return
 	}
 
 	results, err := gocdp.SmartParseFiles(files)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"errors": []string{err.Error()}})
 		return
 	}
 

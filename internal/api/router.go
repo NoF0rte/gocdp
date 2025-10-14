@@ -12,7 +12,7 @@ func SetupRoutes(r *gin.Engine) {
 	// API routes
 	api := r.Group("/api")
 	{
-		api.POST("/parse/files", handler.Parse)
-		api.POST("/parse/path", handler.ParsePath)
+		api.POST("/parse/files", handler.ParseFiles)
+		api.POST("/parse/path", handler.ParseGlob)
 	}
 }
