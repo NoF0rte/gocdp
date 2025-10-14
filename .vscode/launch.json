@@ -10,7 +10,9 @@
 			"request": "launch",
 			"mode": "auto",
 			"program": "${workspaceFolder}/cmd/gocdp",
-			"cwd": "${workspaceFolder}"
+			// "args": ["trim", "-o", "and", "-n", "3000", "-s", "406", "hosts/events.zscaler.com/recon/ffuf.https.events.zscaler.com.wordlist-web-content.json"],
+			"args": ["server"],
+			"cwd": "/home/parallels/op"
 		}
 	]
 }

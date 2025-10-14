@@ -85,11 +85,11 @@ func (results CDResults) UniqueByURL() CDResults {
 }
 
 type CDResult struct {
-	Url           string
-	Status        int
-	Redirect      string
-	ContentType   string
-	ContentLength int
+	Url           string `json:"url"`
+	Status        int    `json:"status"`
+	Redirect      string `json:"redirect"`
+	ContentType   string `json:"contentType"`
+	ContentLength int    `json:"contentLength"`
 
 	source     interface{}
 	isFiltered bool
